@@ -7,11 +7,39 @@ output:
 
 
 ## Loading and preprocessing the data
+Setup the directory structure, filenames etc:
+```{r warning=FALSE}
+data.dir <- "data"
+dir.create(data.dir, recursive=TRUE)
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+zipfile <- "activity.zip"
+datafile <- "activity.csv"
+```
 
+Obtain the raw data file by doing the minimum work to get it. 
+```{r warning=FALSE}
+setwd(data.dir)
+if (!file.exists(datafile)) {
+  if (!file.exists(zipfile)) {
+    download.file(url=url, destfile=zipfile, method="wget")
+  }
+  unzip(zipfile)
+}
+datafile <- paste0(data.dir, "/", datafile)
+```
 
+Read in the csv file, convert to a tibble (I'm a 'hadleyverse' fan!) and clean it of any NAs
+```{r echo=FALSE, warning=FALSE}
+require(dplyr)
+raw.data <- tbl_df(read.csv(datafile))
+clean.data <- na.omit(raw.data)
+```
 
 ## What is mean total number of steps taken per day?
-
+```{r results=asis}
+x <- group_by(clean.data, date) %>% summarize(total_steps_per_day=sum(steps)) %>% summarize(mean_total_steps_per_day=mean(total_steps_per_day))
+x$mean_total_steps_per_day
+```
 
 
 ## What is the average daily activity pattern?
