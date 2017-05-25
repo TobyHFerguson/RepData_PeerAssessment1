@@ -3,4 +3,9 @@
 .RData
 .Ruserdata
 .html
-.md
+PA1_template.md
+PA1_template.html
+PA1_template_files
+activity.csv
+.DS_Store
+RepData_PeerAssessment1.Rproj
