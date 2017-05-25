@@ -7,46 +7,78 @@ output:
 
 
 ## Loading and preprocessing the data
-Setup the directory structure, filenames etc:
-```{r warning=FALSE}
-data.dir <- "data"
-dir.create(data.dir, recursive=TRUE)
-url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+Obtain the raw data file by doing the minimum work to get it. 
+```{r}
 zipfile <- "activity.zip"
 datafile <- "activity.csv"
-```
-
-Obtain the raw data file by doing the minimum work to get it. 
-```{r warning=FALSE}
-setwd(data.dir)
 if (!file.exists(datafile)) {
-  if (!file.exists(zipfile)) {
-    download.file(url=url, destfile=zipfile, method="wget")
-  }
   unzip(zipfile)
 }
-datafile <- paste0(data.dir, "/", datafile)
 ```
 
 Read in the csv file, convert to a tibble (I'm a 'hadleyverse' fan!) and clean it of any NAs
-```{r echo=FALSE, warning=FALSE}
-require(dplyr)
+```{r warning=FALSE}
+suppressPackageStartupMessages(library(dplyr))
 raw.data <- tbl_df(read.csv(datafile))
 clean.data <- na.omit(raw.data)
 ```
 
 ## What is mean total number of steps taken per day?
-```{r results=asis}
-x <- group_by(clean.data, date) %>% summarize(total_steps_per_day=sum(steps)) %>% summarize(mean_total_steps_per_day=mean(total_steps_per_day))
-x$mean_total_steps_per_day
+Here is a histogram of the total number of steps taken each day
+```{r}
+library(ggplot2, verbose = FALSE, quietly = TRUE)
+total_steps_per_day <- group_by(clean.data, date) %>% summarize(total_steps_per_day=sum(steps))
+names(total_steps_per_day) <- c("Date", "Steps")
+qplot(Steps, data=total_steps_per_day, binwidth=500)
 ```
 
+The mean number of steps taken each day is:
+```{r}
+mean(total_steps_per_day$Steps)
+```
 
+The median number of steps taken each day is:
+```{r}
+median(total_steps_per_day$Steps)
+```
 ## What is the average daily activity pattern?
-
-
-
+To see the average daily activity pattern (`adap`) we're going to group by the interval, then summarize by the mean for each interval:
+```{r}
+adap <- group_by(clean.data, interval) %>% summarise(mean(steps))
+names(adap) <- c("Interval", "Steps")
+qplot(Interval, Steps, data=adap, geom='line')
+```
+The 5 minute interval that has the average most number of steps is:
+```{r}
+top_n(adap, 1, Steps)$Interval
+```
 ## Imputing missing values
+To figure out the missing values (i.e. `NA`) in the data set, we convert the `raw.data` to a logical array indicating which cells are  `NA`:
+```{r}
+na_array <- is.na(raw.data)
+```
+We then apply the `any` function to each row to get a vector which is `TRUE` when any column in the corresponding row is `TRUE`; i.e. had an `NA` value in the original data set. We can count the number of such rows using `sum`, because `TRUE` is converted to a `1` and `FALSE` is converted to a `0` when doing integer arithmetic on a logical vector.
+```{r}
+sum(apply(na_array, 1, any))
+```
+So we see there are 2304 rows that contain at least one `NA`.
+
+But is the data missing from just the `steps` column, or one of the other columns? Lets look at what happens if we sum the columns of the `na_array`:
+```{r}
+apply(na_array, 2, sum)
+```
+
+So we know that all the missing data is in the `steps` column. That will make things easier!
+
+To save time I'm going to choose to simply replace missing values with the average for that interval, taken from the table `adap`, calculated earlier. 
+
+We'll do this by doing a full join between the `raw.data` table with the `adap` table, using the `interval` and `Interval` columns respectively to join on. This will give us a new table with a new column `Steps` containing the average steps per interval. We can then mutate this table to create the final set of steps (in a column called `steps2`) by selecting the average steps (from the `Steps` column) if it is `NA` and the original `steps` value otherwise. We'll then select just the columns we want, and rename them to match the original `raw.data` data frame:
+
+```{r}
+new.data <- full_join(raw.data, adap, by=c("interval"="Interval")) %>% 
+  mutate(steps2=ifelse(is.na(steps), Steps, steps)) %>%
+  select(date, interval, steps2) %>% rename(steps = steps2)
+```
 
 
 
