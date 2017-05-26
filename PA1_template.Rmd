@@ -16,40 +16,58 @@ if (!file.exists(datafile)) {
 }
 ```
 
-Read in the csv file, convert to a tibble (I'm a 'hadleyverse' fan!) and clean it of any NAs
+Read in the csv file and convert to a tibble (I'm a 'hadleyverse' fan!) 
 ```{r warning=FALSE}
 suppressPackageStartupMessages(library(dplyr))
 raw.data <- tbl_df(read.csv(datafile))
-clean.data <- na.omit(raw.data)
 ```
 
 ## What is mean total number of steps taken per day?
-Here is a histogram of the total number of steps taken each day
+*1. Make a histogram of the total number of steps taken each day*
+
+To make a histogram of the total number of steps taken each day lets first clean the data up (i.e. remove any rows that have an `NA` in them), then group by the data and summarize by the sum of the steps. We'll then relabel the columns to make it easy to keep track of everything:
 ```{r}
-library(ggplot2, verbose = FALSE, quietly = TRUE)
+clean.data <- na.omit(raw.data)
 data.by_day <- group_by(clean.data, date) %>% summarize(data.by_day=sum(steps))
 names(data.by_day) <- c("date", "steps")
+```
+With the data all cleaned up its a simple call to `qplot` to give us the histogram
+```{r}
+library(ggplot2, verbose = FALSE, quietly = TRUE)
 qplot(steps, data=data.by_day, binwidth=500)
 ```
+
+*2. Calculate and report the mean and median total number of steps taken per day*
 
 The mean and median number of steps taken each day are calculated thus:
 ```{r}
 nos.mean <- mean(data.by_day$steps)
 nos.median <- median(data.by_day$steps)
 ```
-The mean and median number of steps taken each day, ignoring rows with missing data are `r nos.mean` & `r  nos.median`, respectively
+The mean and median number of steps taken each day, ignoring rows with missing data are `r nos.mean` & `r  nos.median`, respectively.
 
 ## What is the average daily activity pattern?
-To see the average daily activity pattern (`adap`) we're going to group by the interval, then summarize by the mean for each interval:
+*1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)*
+
+To see the average daily activity pattern (`adap`) we're going to group by the interval, then summarize by the mean for each interval and rename the columns to tidy things up:
 ```{r}
 adap <- group_by(clean.data, interval) %>% summarise(mean(steps))
 names(adap) <- c("interval", "Steps")
+```
+
+Then we'll use `qplot` to look at these 5 minute intervals:
+```{r}
 qplot(interval, Steps, data=adap, geom='line')
 ```
-The 5 minute interval that has the average most number of steps is:
+
+*2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?*
+
+To calculate the 5-minute interval with the maximum number of steps we'll use the `dplyr::top_n` function:
 ```{r}
-top_n(adap, 1, Steps)$interval
+i.max <- top_n(adap, 1, Steps)$interval
 ```
+The 5 minute interval that has the average most number of steps is `r i.max`.
+
 ## Imputing missing values
 *1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)*
 
@@ -76,7 +94,7 @@ My strategy will be to simply replace missing values with the average for that i
 
 *3. Create a new dataset that is equal to the original dataset but with the missing data filled in.*
 
-We'll do this by doing a full join between the `raw.data` table with the `adap` table on the `interval` column. This will give us a new table with a new column `Steps` containing the average steps per interval. We can then mutate this table to create the final set of steps (in a column called `steps2`) by selecting the average steps (from the `Steps` column) if it is `NA` and the original `steps` value otherwise. We'll then select just the columns we want, and rename them to match the original `raw.data` data frame:
+We'll do this by doing a full join between the `raw.data` table and the `adap` table on the `interval` column. This will give us a new table with a new column `Steps` containing the average steps per interval. We can then mutate this table to create the final set of steps (in a column called `steps2`) by selecting the average steps (from the `Steps` column) if it is `NA` and the original `steps` value otherwise. We'll then select just the columns we want, and rename them to match the original `raw.data` data frame:
 
 ```{r}
 imputed.data <- full_join(raw.data, adap, by=c("interval")) %>% 
@@ -87,13 +105,14 @@ imputed.data <- full_join(raw.data, adap, by=c("interval")) %>%
 
 *4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?*
 
+The calculation and histogram plot is identical to what we did earlier, but just using the `imputed.data`.
 ```{r}
 imputed.data.by_day <- group_by(imputed.data, date) %>% summarize(imputed.data.by_day=sum(steps))
 names(imputed.data.by_day) <- c("date", "steps")
 qplot(steps, data=imputed.data.by_day, binwidth=500)
 ```
 
-Recalculate the number of steps mean and median:
+Similarly for the mean and median number of steps:
 ```{r}
 new.nos.mean <- mean(imputed.data.by_day$steps)
 new.nos.median <- median(imputed.data.by_day$steps)
@@ -108,3 +127,25 @@ So the values do differ from the original values, but not by much.
 The impact of imputing missing data on the estimates of the total daily number of steps was not to change the mean but to bring the median in line with the mean.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+*Create a new factor variable in the dataset with two levels -- "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.*
+
+We'll create this new factor variable by first creating a new `day` variable by converting each `date` value to a `POSIXct` value and then using the `weekdays()` function to get the name of the day. We'll then use that to construct a `Weekend` factor variable that has the value `weekend` if its a `Saturday` or a `Sunday`, and `weekday` otherwise. We'll then select just the columns (`steps`, `interval`, `Weekend`) that we need:
+```{r}
+weekday.data <- imputed.data %>%
+  mutate(day=weekdays(as.POSIXct(strptime(date, format="%Y-%m-%d")))) %>%
+  mutate(Weekend=as.factor(ifelse(day %in% c('Saturday', 'Sunday'), "weekend", "weekday"))) %>%
+  select(steps, interval, Weekend)
+```
+
+
+*Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).*
+
+So what we have to do here is to group by the interval, then by the weekday and average those groups:
+```{r}
+weekday.data.averaged <- group_by(weekday.data, interval, Weekend) %>% summarize(mean(steps)) 
+names(weekday.data.averaged) <- c('interval', 'Weekend', 'steps')
+```
+We can plot this using `ggplot` to provide the line plot of `interval` against `step`, adding a `facet_grid` to separate out the `weekday` data from the `weekend` data:
+```{r}
+ggplot(weekday.data, aes(interval, steps)) + geom_line() + facet_grid(Weekend ~ .) + labs(y='Number of Steps')
+```
